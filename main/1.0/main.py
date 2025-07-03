@@ -1,6 +1,5 @@
 # PyXE Main
 
-import traceback
 import time
 import sys
 import com
