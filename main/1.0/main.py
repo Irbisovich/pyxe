@@ -78,6 +78,7 @@ except IndexError:
     pass
 
 except:
-    pass
-
-    traceback.print_exc()
+    print('Fatal error has happened.\n')
+    
+print('Program completed. Window will closed.')
+time.sleep(3)
