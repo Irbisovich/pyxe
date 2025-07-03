@@ -1,0 +1,468 @@
+; Demo works for versions 1.0 - latest
+
+start:
+    drag ACCUMULATOR, 1
+    defbyte current_room: 1
+    drag BASEPOINTER, 0  
+    drag STACKPOINTER, 0x0FFC
+    
+    print "Welcome to PyXE Adventure!\n"
+    print "You find yourself at the entrance of a mysterious cave.\n"
+    print "Commands: GO, TAKE, USE, LOOK, INVENTORY, QUIT\n"
+    print "Directions: NORTH, SOUTH, EAST, WEST\n"
+
+game_loop:
+    call show_room
+    call show_items
+    
+    print "> "
+    drag ACCUMULATOR, 3  
+    drag BASE, 0        
+    drag COUNT, input_buffer
+    drag DATA, 32
+    interrupt 0x80
+    
+    call parse_command
+    go game_loop
+
+show_room:
+    ; Получить описание текущей комнаты
+    drag ACCUMULATOR, [current_room]
+    decrease ACCUMULATOR    
+    drag BASE, 40      
+    multiply ACCUMULATOR, BASE
+    drag BASE, room_descriptions
+    add ACCUMULATOR, BASE
+    
+    ; Вывести описание
+    drag COUNT, ACCUMULATOR
+    drag ACCUMULATOR, 4   
+    drag BASE, 1     
+    drag DATA, 40
+    interrupt 0x80
+    print "\n"
+    return
+
+show_items:
+    drag ACCUMULATOR, [current_room]
+    decrease ACCUMULATOR
+    drag BASE, 2      
+    multiply ACCUMULATOR, BASE
+    drag BASE, room_items
+    add ACCUMULATOR, BASE
+    drag COUNT, [ACCUMULATOR]
+    compare COUNT, 0
+    go-true no_items       
+    
+    ; Вывести сообщение о предмете
+    print "You see: "
+    drag ACCUMULATOR, 4   
+    drag BASE, 1          
+    drag DATA, 10    
+    interrupt 0x80
+    print "\n"
+    return
+
+no_items:
+    return
+
+parse_command:
+    drag COUNT, input_buffer
+    drag DATA, command
+    call split_string
+    
+    ; Определить команду
+    drag ACCUMULATOR, [command]
+    
+    compare ACCUMULATOR, 'GO'
+    go-true cmd_go
+    
+    compare ACCUMULATOR, 'TAKE'
+    go-true cmd_take
+    
+    compare ACCUMULATOR, 'USE'
+    go-true cmd_use
+    
+    compare ACCUMULATOR, 'LOOK'
+    go-true cmd_look
+    
+    compare ACCUMULATOR, 'INVENTORY'
+    go-true cmd_inventory
+    
+    compare ACCUMULATOR, 'QUIT'
+    go-true cmd_quit
+    
+    print "I don't understand that command.\n"
+    return
+
+cmd_go:
+    drag ACCUMULATOR, [arg]
+    
+    compare ACCUMULATOR, 'NORTH'
+    go-true go_north
+    
+    compare ACCUMULATOR, 'SOUTH'
+    go-true go_south
+    
+    compare ACCUMULATOR, 'EAST'
+    go-true go_east
+    
+    compare ACCUMULATOR, 'WEST'
+    go-true go_west
+    
+    print "Invalid direction. Use NORTH, SOUTH, EAST or WEST.\n"
+    return
+
+go_north:
+    drag ACCUMULATOR, [current_room]
+    decrease ACCUMULATOR
+    drag BASE, 4
+    multiply ACCUMULATOR, BASE
+    drag BASE, room_exits
+    add ACCUMULATOR, BASE
+    drag DEST, [ACCUMULATOR]
+    go check_exit
+
+go_south:
+    drag ACCUMULATOR, [current_room]
+    decrease ACCUMULATOR
+    drag BASE, 4
+    multiply ACCUMULATOR, BASE
+    drag BASE, room_exits
+    add ACCUMULATOR, BASE
+    increase ACCUMULATOR
+    drag DEST, [ACCUMULATOR]
+    go check_exit
+
+go_east:
+    drag ACCUMULATOR, [current_room]
+    decrease ACCUMULATOR
+    drag BASE, 4
+    multiply ACCUMULATOR, BASE
+    drag BASE, room_exits
+    add ACCUMULATOR, BASE
+    increase ACCUMULATOR
+    increase ACCUMULATOR
+    drag DEST, [ACCUMULATOR]
+    go check_exit
+
+go_west:
+    drag ACCUMULATOR, [current_room]
+    decrease ACCUMULATOR
+    drag BASE, 4
+    multiply ACCUMULATOR, BASE
+    drag BASE, room_exits
+    add ACCUMULATOR, BASE
+    increase ACCUMULATOR
+    increase ACCUMULATOR
+    increase ACCUMULATOR
+    drag DEST, [ACCUMULATOR]
+    go check_exit
+
+check_exit:
+    compare DEST, 0
+    go-false valid_exit
+    print "You can't go that way.\n"
+    return
+
+valid_exit:
+    drag [current_room], DEST
+    call show_room
+    
+    drag ACCUMULATOR, [current_room]
+    compare ACCUMULATOR, 5  ; Темная яма
+    go-true pit_trap
+    return
+
+pit_trap:
+    print "You fell into a dark pit! You lose 10 health points.\n"
+    drag ACCUMULATOR, [player_health]
+    subtract ACCUMULATOR, 10
+    drag [player_health], ACCUMULATOR
+    
+    compare ACCUMULATOR, 0
+    go-false alive
+    print "You have died! Game over.\n"
+    stop
+
+alive:
+    print "Current health: "
+    print [player_health]
+    print "\n"
+    return
+
+cmd_take:
+    drag ACCUMULATOR, [current_room]
+    decrease ACCUMULATOR
+    drag BASE, 2
+    multiply ACCUMULATOR, BASE
+    drag BASE, room_items
+    add ACCUMULATOR, BASE
+    drag COUNT, [ACCUMULATOR]
+    drag DATA, [arg]
+    call compare_strings
+    compare ACCUMULATOR, 1
+    go-false no_item_here
+    
+    drag ACCUMULATOR, [current_room]
+    decrease ACCUMULATOR
+    drag BASE, 2
+    multiply ACCUMULATOR, BASE
+    drag BASE, room_items
+    add ACCUMULATOR, BASE
+    drag [ACCUMULATOR], 0
+
+    drag ACCUMULATOR, [arg]
+    compare ACCUMULATOR, 'KEY'
+    go-true take_key
+    
+    compare ACCUMULATOR, 'TORCH'
+    go-true take_torch
+    
+    compare ACCUMULATOR, 'TREASURE'
+    go-true take_treasure
+    
+    return
+
+take_key:
+    logic-or BASEPOINTER, 1  ; Бит 0 - ключ
+    print "Taken! Golden Key added to inventory.\n"
+    
+    drag ACCUMULATOR, [player_score]
+    add ACCUMULATOR, 10
+    drag [player_score], ACCUMULATOR
+    return
+
+take_torch:
+    logic-or BASEPOINTER, 2  ; Бит 1 - фонарик
+    print "Taken! Rusty Torch added to inventory.\n"
+    
+    drag ACCUMULATOR, [player_score]
+    add ACCUMULATOR, 5
+    drag [player_score], ACCUMULATOR
+    return
+
+take_treasure:
+    logic-or BASEPOINTER, 4
+    print "Taken! Shiny Treasure added to inventory.\n"
+    
+    drag ACCUMULATOR, [player_score]
+    add ACCUMULATOR, 50
+    drag [player_score], ACCUMULATOR
+    
+    drag ACCUMULATOR, [current_room]
+    compare ACCUMULATOR, 6  ; Выход
+    go-true win_game
+    return
+
+no_item_here:
+    print "I don't see that here.\n"
+    return
+
+cmd_use:
+    drag ACCUMULATOR, [arg]
+    compare ACCUMULATOR, 'KEY'
+    go-true use_key
+    
+    compare ACCUMULATOR, 'TORCH'
+    go-true use_torch
+    
+    compare ACCUMULATOR, 'TREASURE'
+    go-true use_treasure
+    
+    print "You don't have that item.\n"
+    return
+
+use_key:
+    drag ACCUMULATOR, [current_room]
+    compare ACCUMULATOR, 4
+    go-false wrong_place
+    
+    drag ACCUMULATOR, BASEPOINTER
+    logic-and ACCUMULATOR, 4  ; Проверить бит сокровища
+    compare ACCUMULATOR, 0
+    go-false already_used
+    
+    print "You unlock the chest with the golden key!\n"
+    print "Inside you find a shiny treasure!\n"
+    
+    drag ACCUMULATOR, 3  ; room_items[3] - сундук
+    drag BASE, 2
+    multiply ACCUMULATOR, BASE
+    drag BASE, room_items
+    add ACCUMULATOR, BASE
+    drag [ACCUMULATOR], treasure_name
+    
+    drag ACCUMULATOR, [player_score]
+    add ACCUMULATOR, 20
+    drag [player_score], ACCUMULATOR
+    return
+
+use_torch:
+    drag ACCUMULATOR, [current_room]
+    compare ACCUMULATOR, 5  ; Темная яма
+    go-false not_dark
+    
+    print "You light the torch. It illuminates the pit, revealing a hidden path!\n"
+    
+    drag ACCUMULATOR, 4  ; room_exits[4][0] - север
+    drag BASE, 4
+    multiply ACCUMULATOR, BASE
+    drag BASE, room_exits
+    add ACCUMULATOR, BASE
+    drag [ACCUMULATOR], 6  ; Выход на север
+    return
+
+not_dark:
+    print "You light the torch, but it doesn't reveal anything new.\n"
+    return
+
+use_treasure:
+    print "You admire the treasure. It's beautiful but heavy!\n"
+    return
+
+wrong_place:
+    print "You can't use that here.\n"
+    return
+
+already_used:
+    print "You've already done that.\n"
+    return
+
+cmd_look:
+    call show_room
+    call show_items
+    return
+
+cmd_inventory:
+    print "Inventory:\n"
+    
+    drag ACCUMULATOR, BASEPOINTER
+    logic-and ACCUMULATOR, 1
+    compare ACCUMULATOR, 0
+    go-false no_key
+    print "- Golden Key\n"
+
+no_key:
+    drag ACCUMULATOR, BASEPOINTER
+    logic-and ACCUMULATOR, 2
+    compare ACCUMULATOR, 0
+    go-false no_torch
+    print "- Rusty Torch\n"
+
+no_torch:
+    drag ACCUMULATOR, BASEPOINTER
+    logic-and ACCUMULATOR, 4
+    compare ACCUMULATOR, 0
+    go-false no_treasure
+    print "- Shiny Treasure\n"
+
+no_treasure:
+    print "Health: "
+    print [player_health]
+    print "\nScore: "
+    print [player_score]
+    print "\n"
+    return
+
+cmd_quit:
+    print "Thanks for playing PyXE Adventure!\n"
+    print "Final score: "
+    print [player_score]
+    print "\n"
+    stop
+
+split_string:
+    drag ACCUMULATOR, [COUNT]
+    drag [DATA], ACCUMULATOR
+    increase DATA
+    increase COUNT
+    
+split_loop:
+    drag ACCUMULATOR, [COUNT]
+    compare ACCUMULATOR, ' '
+    go-true found_space
+    compare ACCUMULATOR, 0
+    go-true end_of_string
+    drag [DATA], ACCUMULATOR
+    increase DATA
+    increase COUNT
+    go split_loop
+
+found_space:
+    drag [DATA], 0
+    increase COUNT
+    drag DATA, arg
+    go split_loop
+
+end_of_string:
+    drag [DATA], 0
+    return
+
+compare_strings:
+    ; Compare two strings
+    ; In: Count - string1, DATA - string2
+    ; Out: ACCUMULATOR - 1 if true, 0 else
+    
+compare_loop:
+    drag ACCUMULATOR, [COUNT]
+    drag BASE, [DATA]
+    compare ACCUMULATOR, BASE
+    go-false not_equal
+    compare ACCUMULATOR, 0
+    go-true equal
+    increase COUNT
+    increase DATA
+    go compare_loop
+
+not_equal:
+    drag ACCUMULATOR, 0
+    return
+
+equal:
+    drag ACCUMULATOR, 1
+    return
+
+win_game:
+    print "Congratulations! You escaped with the treasure!\n"
+    print "Final score: "
+    print [player_score]
+    print "\n"
+    stop
+
+defbyte current_room: 1
+defdouble player_health: 100
+defdouble player_score: 0
+
+room_descriptions:
+    defbyte "Entrance to the cave. A cold wind blows from within."
+    defbyte "Twisting passages. Torchlight flickers on the walls. "
+    defbyte "Underground river. The sound of water echoes loudly. "
+    defbyte "Ancient cavern. A large chest sits in the center.    "
+    defbyte "Dark pit. You can't see the bottom. Watch your step! "
+    defbyte "Exit! Sunlight streams through the opening. Freedom!"
+
+room_exits:
+    defbyte 2, 0, 0, 0
+    defbyte 3, 1, 0, 0
+    defbyte 0, 2, 4, 0
+    defbyte 0, 0, 0, 3
+    defbyte 0, 0, 0, 0 
+    defbyte 0, 0, 0, 0
+
+room_items:
+    defword 0
+    defword key_name
+    defword torch_name  
+    defword chest_name
+    defword 0
+    defword 0
+
+key_name:      defbyte "KEY       ",0
+torch_name:    defbyte "TORCH     ",0
+chest_name:    defbyte "CHEST     ",0
+treasure_name: defbyte "TREASURE  ",0
+
+input_buffer: defbyte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+command:      defbyte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+arg:          defbyte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
