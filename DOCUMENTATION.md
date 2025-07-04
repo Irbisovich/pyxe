@@ -1,14 +1,13 @@
 # PyXE Documentation
 
 ## Introduction
-PyXE is a custom assembly-like programming language and virtual machine designed for educational purposes and creating text-based adventure games. It features a simplified instruction set, custom registers, and built-in I/O capabilities.
+PyXE is a custom assembly-like programming language and virtual machine designed just for fun. It features a simplified instruction set, custom registers, and built-in I/O capabilities.
 
 Key Features:
 - 8 dedicated registers
 - 16 custom instructions with aliases
 - Built-in string handling and I/O
 - 1MB memory space
-- Customizable text adventure framework
 
 ## Registers
 PyXE provides 8 specialized registers:
@@ -187,4 +186,3 @@ or run it from your file manager.
      2. Resolve data addresses
      3. Compile instructions
      4. Compile data
- see the Microsoft Adventure implementation in the demos folder.
